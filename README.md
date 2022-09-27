@@ -12,7 +12,7 @@ As tested on the CASF-2016 benchmark, PLANET exhibited a comparable level of sco
 conda create --name planet -f planet.yaml
 conda activate planet
 ```
-2. Using PLAENT
+2. Using PLANET <br>
 We have created a demo folder which includes a protein file (adrb2.pdb), a crystal ligand file (adrb2_ligand.sdf) as well as molecules (mols.sdf) to be estimated. These files are  originally derived from DUD-E dataset and prepared as below: <br>
 (1) The protein structure file (.pdb) are prepared using *prepwizard* in Maestro, including fixing broken residues and assign protonated states. Other structure preparation tools can also be applied. _NOTE:_ The most important is that $\alpha$-carbon of each reasidues must be correctly fixed in the .pdb file.
 (2) The molecule files (mols.sdf) are prepared using *epik* in Maestro, including adding hydrogen atoms and ionized states. the adrb2_ligand.sdf file is only used for determining binding pocket (only need to be in .sdf format).
@@ -26,7 +26,7 @@ python3.6 ../PLANET_run.py -p adrb2.pdb -l adrb2_ligand.sdf -m mols.sdf
    - _-x or --center_x ; -y or --center_y ; -z or --center_z _, coordinates to define the center of binding pocket, same as follows
    - _-m or --mol_file_, molecules to be esitmated in .sdf format
    - _--prefix_, if not specified, the default is "result", that is the outcome will be saved as "result.csv" and "result.sdf"
-4. Output files
+4. Output files <br>
 We provide two output formats including .csv and .sdf
 
 ### Training PLANET
