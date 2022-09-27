@@ -1,6 +1,6 @@
 # **PLANET**
 
-### SECSE: _**P**rotein-**L**igand **A**ffinity prediction **NET**work_
+### PLANET: _**P**rotein-**L**igand **A**ffinity prediction **NET**work_
 
 Predicting protein-ligand binding affinity is still a central issue in drug design. No wonder various deep learning models have been developed in recent years to tackle this issue in one aspect or another. So far most of them merely focus on reproducing the binding affinity of known binders (i.e. so-called “scoring power”).<br>
 Here, we have developed a graph neural network model called PLANET (Protein-Ligand Affinity prediction NETwork). This model takes the graph-represented 3D structure of the binding pocket on the target protein and the 2D structural graph of the ligand molecule as inputs. PLANET was trained through a multi-objective process with three related tasks, i.e. deriving protein-ligand binding affinity, protein-ligand contact map, and intra-ligand distance matrix. <br>
