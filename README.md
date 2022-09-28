@@ -33,7 +33,7 @@ We provide two output formats including .csv and .sdf
 We provided the training scripts called "PLANET_train.py" and "PLANET_datautils.py". But the training data (i.e. PDBbind general set v.2020) are not included in this repository, which can be accessed through: http://pdbbind.org.cn/. <br>
 As mentioned in our paper (in preparation), all structures in general set are prepared and a large number of decoy molecules are used for augmentation. This part of data are not provided to public till now. <br>
 If anyone want to re-train the PLANET (maybe after the training data is released, at that time another folder called 'data' will be released, in which include the summary of training set, validation set and core set in .csv format), here is the protocol: <br>
-suppose the absolute path to PDBbind general set is $DATASET, and all the scripts related to PLANET is in $PLANET. 
+suppose the absolute path to PDBbind general set is $DATASET, and all the scripts related to PLANET are in $PLANET. 
 ```bash
 python3.6 $PLANET/process_PDBbind.py -d $DATASET -n $njobs
 python3.6 $PLANET/PLANET_datautils.py -p $DATASET -d $PLANET/data/
