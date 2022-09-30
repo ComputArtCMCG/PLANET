@@ -9,7 +9,7 @@ As tested on the CASF-2016 benchmark, PLANET exhibited a comparable level of sco
 ### Usage
 1. Setup dependencies
 ```bash
-conda create --name planet -f planet.yaml
+conda create -f planet.yaml
 conda activate planet
 ```
 2. Using PLANET <br>
