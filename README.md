@@ -23,7 +23,7 @@ python3.6 ../PLANET_run.py -p adrb2.pdb -l adrb2_ligand.sdf -m mols.sdf
 3. Parameters
    - _-p or --protein_, protein structure file;
    - _-l or --ligand_, crystal ligand file for determining binding pocket, if specified, override the coordinate provided.
-   - _-x or --center_x ; -y or --center_y ; -z or --center_z _, coordinates to define the center of binding pocket, same as follows
+   - _-x or --center_x ; -y or --center_y ; -z or --center_z , coordinates to define the center of binding pocket, same as follows
    - _-m or --mol_file_, molecules to be esitmated in .sdf format
    - _--prefix_, if not specified, the default is "result", that is the outcome will be saved as "result.csv" and "result.sdf"
 4. Output files <br>
