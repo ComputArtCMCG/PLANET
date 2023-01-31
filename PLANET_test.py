@@ -10,6 +10,7 @@ import argparse,math,rdkit,os,pickle
 def test_PLANET(PLANET,test_pickle):
     test_dataset = ProLigDataset(test_pickle,batch_size=16,shuffle=False,decoy_flag=False)
     test_loader = DataLoader(test_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
+    bonded_pairs = test_dataset.get_bonded_atom_pairs()
     PLANET.eval()
     predicted_lig_interactions,predicted_interactions,predicted_affinities,lig_scopes,res_scopes= [],[],[],[],[]
     ligand_interactions,pro_lig_interactions,pKs = [],[],[]
@@ -48,7 +49,7 @@ def test_PLANET(PLANET,test_pickle):
     print('MAE:{:3f}\tRMSE:{:3f}\tPearson:{:3f}\tP_pvalue:{:3f}\tSpearman:{:3f}\tS_pvalue:{:3f}'.format(MAE,RMSE,P_correlation,P_pvalue,S_correlation,S_pvalue))
 
     return predicted_lig_interactions,predicted_interactions,predicted_affinities, \
-            ligand_interactions,pro_lig_interactions,pKs,lig_scopes,res_scopes
+            ligand_interactions,pro_lig_interactions,pKs,lig_scopes,res_scopes,bonded_pairs
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -72,8 +73,8 @@ if __name__ == '__main__':
     PLANET.load_state_dict(torch.load(args.PLANET_file))
     
     predicted_lig_interactions,predicted_interactions,predicted_affinities,\
-        ligand_interactions,pro_lig_interactions,pKs,lig_scopes,res_scopes = test_PLANET(PLANET,args.test)
+        ligand_interactions,pro_lig_interactions,pKs,lig_scopes,res_scopes,bonded_pairs = test_PLANET(PLANET,args.test)
     with open(args.out_path,'wb') as pickle_out:
         out_data = [predicted_lig_interactions,predicted_interactions,predicted_affinities,\
-            ligand_interactions,pro_lig_interactions,pKs,lig_scopes,res_scopes]
+            ligand_interactions,pro_lig_interactions,pKs,lig_scopes,res_scopes,bonded_pairs]
         pickle.dump(out_data,pickle_out,protocol=pickle.HIGHEST_PROTOCOL)

@@ -13,7 +13,9 @@ if __name__ == '__main__':
     RDLogger.DisableLog('rdApp.*')
     parser = argparse.ArgumentParser()
     parser.add_argument('-t','--train', required=True)
+    parser.add_argument('-ta','--train_affinity', required=True)
     parser.add_argument('-v','--valid',required=True)
+    parser.add_argument('-te','--test',required=True)
     parser.add_argument('-d','--save_dir', required=True)
 
     parser.add_argument('-s','--feature_dims', type=int, default=300)
@@ -45,6 +47,8 @@ if __name__ == '__main__':
     valid_dataset = ProLigDataset(args.valid,args.batch_size,shuffle=False,decoy_flag=False)
     valid_loader = DataLoader(valid_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
 
+    test_dataset = ProLigDataset(args.test,args.batch_size,shuffle=False,decoy_flag=False)
+    test_loader = DataLoader(test_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
 
 
     feature_dims,nheads,key_dims,value_dims,pro_update_inters,lig_update_iters,pro_lig_update_iters = args.feature_dims,args.nheads,args.key_dims,args.value_dims,\
@@ -63,13 +67,17 @@ if __name__ == '__main__':
     scheduler = lr_scheduler.ExponentialLR(optimizer,0.8)
     total_step = args.initial_step
     meters = np.zeros(6)
-    lr_drop = False  #flag for fix param
+    affinity_all,lr_drop = False,False  #flag for fix param
     beta = 0
 
     PLANET.train()
     for epoch in range(1,1+args.epoch):
-        train_dataset = ProLigDataset(args.train,args.batch_size,shuffle=True,decoy_flag=True)
-        train_loader = DataLoader(train_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
+        if not affinity_all:
+            train_dataset = ProLigDataset(args.train,args.batch_size,shuffle=True,decoy_flag=True)
+            train_loader = DataLoader(train_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
+        else:
+            train_dataset = ProLigDataset(args.train_affinity,args.batch_size,shuffle=True,decoy_flag=False)
+            train_loader = DataLoader(train_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
         
         for (res_feature_batch,mol_feature_batch,targets) in train_loader:
             optimizer.zero_grad()
@@ -140,6 +148,23 @@ if __name__ == '__main__':
                         .format(total_step,valid_meters[0], valid_meters[1],valid_meters[2],valid_meters[3],valid_meters[4],valid_meters[5]))
 
                 torch.save(PLANET.state_dict(), args.save_dir + "/PLANET.iter-" + str(total_step))
+                
+                with torch.no_grad():
+                    test_meters = np.zeros(6)
+                    test_batch_count = 0            
+                    for (res_batch,mol_batch,targets) in test_loader:
+                        try:
+                            predictions = PLANET(res_batch,mol_batch)
+                            lig_interaction_loss,pro_lig_interaction_loss,affinity_loss = PLANET.compute_loss(predictions,targets,res_batch,mol_batch)
+                            lig_interaction_acc,pro_lig_interaction_acc,affinity_mae = PLANET.compute_metrics(predictions,targets)
+                            test_batch_count += 1
+                            test_meters =  test_meters + np.array([lig_interaction_loss.item(),lig_interaction_acc.item(),pro_lig_interaction_loss.item(),\
+                                pro_lig_interaction_acc.item(),affinity_loss.item(),affinity_mae.item()])
+                        except:
+                            continue
+                    test_meters /= test_batch_count
+                    print ("[Test_{}]\tLig_L:{:.3f}\tLig_ACC:{:.3f}\tProLig_L:{:.3f}\tProLig_ACC:{:.3f}\tAffinity_L:{:.3f}\tMAE:{:.3f}" \
+                        .format(total_step,test_meters[0], test_meters[1],test_meters[2],test_meters[3],test_meters[4],test_meters[5]))
                 PLANET.train()
         
 

@@ -21,12 +21,15 @@ class PLANET(nn.Module):
     def forward(self,res_batch,mol_batch):
         (fresidues,res_map,res_scope,alpha_coordinates) = res_batch
         fresidues = fresidues.to(self.device)
-        alpha_coordinates = create_var(alpha_coordinates)
+        #res_map = create_var(res_map)
+        alpha_coordinates = alpha_coordinates.to(self.device)
         (fatoms, fbonds, agraph, bgraph, lig_scope) = mol_batch
         fatoms = fatoms.to(self.device)
         fbonds = fbonds.to(self.device)
         agraph = agraph.to(self.device)
         bgraph = bgraph.to(self.device)
+
+        #distance_weight,res_mask = self.distance_network(fresidues,alpha_coordinates,res_scope,res_map)
         fresidues = self.proteinegnn(fresidues,alpha_coordinates,res_scope)
         fatoms = self.ligandgat(fatoms,fbonds,agraph,bgraph,lig_scope)
          
@@ -84,7 +87,7 @@ class PLANET(nn.Module):
         
         return lig_interaction_acc,pro_lig_interaction_acc,affinity_mae
 
-    def load_parameters(self,parameters=os.path.join(os.path.dirname(os.path.abspath(__file__)),'PLANET.param')):
+    def load_parameters(self,parameters=os.path.join('PLANET','PLANET.iter-205000')):
         self.load_state_dict(torch.load(parameters,map_location=self.device))
         
     ###used for screening (only one protein, different mols)
@@ -99,7 +102,7 @@ class PLANET(nn.Module):
         fresidues = fresidues.repeat(batch_size,1)
         return fresidues,res_scope
 
-    def screening(self,fresidues,res_scope,mol_feature_batch) -> torch.Tensor:
+    def screening(self,fresidues,res_scope,mol_feature_batch):
         (fatoms, fbonds, agraph, bgraph, lig_scope) = mol_feature_batch
         fatoms = self.ligandgat(fatoms,fbonds,agraph,bgraph,lig_scope)
         _,_,predicted_affinities = self.prolig(fresidues,fatoms,res_scope,lig_scope)

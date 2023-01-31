@@ -1,13 +1,19 @@
+from operator import le
+from numpy.core.fromnumeric import shape
 import pandas as pd
 import rdkit,os
 import rdkit.Chem as Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import Descriptors
 from rdkit.Chem.QED import qed
+from scipy.sparse import coo, csr_matrix
+from scipy.sparse.csgraph import minimum_spanning_tree
 from collections import defaultdict
+from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
+#from vocab import Vocab
 import numpy as np
 import torch
-from typing import List
+from typing import List,Tuple
 
 MST_MAX_WEIGHT = 100 
 MAX_NCAND = 2000
@@ -116,13 +122,13 @@ class ComplexPocket():
     def __init__(self,protein_pdb,ligand_sdf,pK=0,decoy_sdf=None):
         with open(protein_pdb,'r') as pdb_file:
             pdb_content = [line.strip() for line in pdb_file if line.startswith('ATOM')]
-        ligand = Chem.SDMolSupplier(ligand_sdf,sanitize=False)[0]
+        ligand = Chem.SDMolSupplier(ligand_sdf,removeHs=False)[0]
         self.ligand = Mol(ligand)
         
         self.pK = pK
 
         if decoy_sdf is not None and os.path.exists(decoy_sdf):
-            self.decoys = [Mol(mol) for mol in Chem.SDMolSupplier(decoy_sdf,sanitize=False)]
+            self.decoys = [Mol(mol) for mol in Chem.SDMolSupplier(decoy_sdf,removeHs=False) if mol is not None]
         else:
             self.decoys = []
         self.decoys_count = len(self.decoys)
@@ -227,6 +233,13 @@ class Mol():
     def compute_centeroid(self) -> np.ndarray: 
         atom_coordinates = self.get_atom_coordinates()
         return np.mean(atom_coordinates,axis=0)
+
+    def get_bonded_atoms(self) -> List[Tuple]:
+        bonded_atom_pairs = []
+        for bond in self.mol.GetBonds():
+            bonded_atom_pairs.append((bond.GetBeginAtomIdx(),bond.GetEndAtomIdx()))
+            bonded_atom_pairs.append((bond.GetEndAtomIdx(),bond.GetBeginAtomIdx()))
+        return bonded_atom_pairs
 
 def random_ligand_decoy(protein_pockets,decoy_flag):
     if decoy_flag:
@@ -367,6 +380,9 @@ def mol_batch_to_graph(mol_batch:List[Chem.rdchem.Mol]):
                 bgraph[b1,i] = b2  # index of edges pointed to edge 
 
     return (fatoms, fbonds, agraph, bgraph, lig_scope)
+
+def sanitize_mol(smi):
+    return Chem.AddHs(Chem.MolFromSmiles(Chem.MolToSmiles(Chem.MolFromSmiles(smi,sanitize=True),isomericSmiles=False)))
 
 def role_of_5(mol):
     mol_weight = Descriptors.MolWt(mol)

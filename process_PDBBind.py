@@ -23,7 +23,8 @@ def process_PDBBind(record_dir):
         with open(pocket_pkl,'wb') as f:
             pickle.dump(pocket, f, pickle.HIGHEST_PROTOCOL) 
     except Exception as e:
-        print(pdb_name)
+        pass
+        #print(pdb_name)
         #os.system('cp -r /disk1/aquila/PDBbind2020_all/origin/{}/ /disk1/aquila/PDBbind2020_repair/'.format(pdb_name))
 
 if __name__ == '__main__':

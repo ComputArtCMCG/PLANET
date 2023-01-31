@@ -1,5 +1,4 @@
-from email.mime import base
-import torch
+from typing import List
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import os,argparse,pickle,sys,random
@@ -7,6 +6,7 @@ from chemutils import ComplexPocket,tensorize_all,role_of_5
 import numpy as np
 from rdkit import Chem
 import rdkit
+from itertools import chain
 
 class ProLigDataset(Dataset):
     def __init__(self,data_pickle_path,batch_size,shuffle=True,decoy_flag=True):
@@ -41,10 +41,20 @@ class ProLigDataset(Dataset):
         pocket_batch = []
         for record in self.data[idx]:
             with open(record[0],'rb') as f:
-                pocket = pickle.load(f)
+                pocket:ComplexPocket = pickle.load(f)
                 pocket_batch.append(pocket)    
         res_feature_batch,mol_feature_batch,mol_intearctions,pro_lig_interactions,pKs,pK_flags,complex_labels = tensorize_all(pocket_batch,self.decoy_flag)
         return res_feature_batch,mol_feature_batch,(mol_intearctions,pro_lig_interactions,pKs,pK_flags,complex_labels)
+
+    def get_bonded_atom_pairs(self) -> List[List[tuple]]:
+        bonded_pairs = []
+        for record in chain(*self.data):
+            with open(record[0],'rb') as f:
+                pocket:ComplexPocket = pickle.load(f)
+                bonded_pairs.append(pocket.ligand.get_bonded_atoms())
+        return bonded_pairs
+            
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

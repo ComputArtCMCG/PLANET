@@ -1,11 +1,10 @@
 import rdkit.Chem as Chem
-import torch,sys
+import torch,sys,os
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 from PLANET_model import PLANET
-from chemutils import ProteinPocket,mol_batch_to_graph
-from typing import Tuple,List
+from chemutils import ProteinPocket,mol_batch_to_graph,sanitize_mol
 
 class PlanetEstimator():
     def __init__(self,device):
@@ -19,23 +18,23 @@ class PlanetEstimator():
         try:
             self.pocket = ProteinPocket(protein_pdb=protein_pdb,ligand_sdf=ligand_sdf)
         except:
-            raise RuntimeError
+            raise RuntimeError('the protein pdb file need to be fixed')
         self.res_features = self.model.cal_res_features_helper(self.pocket.res_features,self.pocket.alpha_coordinates)
 
     def set_pocket_from_coordinate(self,protein_pdb,centeriod_x,centeriod_y,centeriod_z):
         try:
             self.pocket = ProteinPocket(protein_pdb,centeriod_x,centeriod_y,centeriod_z)
         except:
-            raise RuntimeError
+            raise RuntimeError('the protein pdb file need to be fixed')
         self.res_features = self.model.cal_res_features_helper(self.pocket.res_features,self.pocket.alpha_coordinates)
 
     def pre_cal_res_features(self):
         self.res_features = self.model.cal_res_features_helper(self.pocket.res_features,self.pocket.alpha_coordinates)
 
-class VirtualScreening_Dataset(Dataset):
-    def __init__(self,sdf_file,batch_size=32):
+class VS_SDF_Dataset(Dataset):
+    def __init__(self,sdf_file,batch_size=48):
         self.batch_size = batch_size
-        self.sdf_supp = Chem.SDMolSupplier(sdf_file,removeHs=False,sanitize=False)
+        self.sdf_supp = Chem.SDMolSupplier(sdf_file,removeHs=False,sanitize=True)
         self.data_index = self.mol_index_from_sdf()
 
     def __len__(self):
@@ -47,21 +46,18 @@ class VirtualScreening_Dataset(Dataset):
     def tensorize(self,idx):
         mol_batch_idx = self.data_index[idx]
         mol_batch = [self.sdf_supp[i] for i in mol_batch_idx]
-        mol_batch = [mol for mol in mol_batch if mol is not None]
+        mol_batch = [Chem.AddHs(mol) for mol in mol_batch if mol is not None]
         mol_feature_batch = mol_batch_to_graph(mol_batch)
         mol_smiles = [Chem.MolToSmiles(Chem.RemoveHs(mol)) for mol in mol_batch]
-        mol_names = [mol.GetProp('_Name') for mol in mol_batch]
+        mol_names = [""  for mol in mol_batch]
+        #mol_names = [mol.GetProp('PUBCHEM_EXT_DATASOURCE_REGID') for mol in mol_batch]
         return (mol_feature_batch,mol_smiles,mol_names)
 
     def mol_index_from_sdf(self):
         index_list = []
         for i,mol in enumerate(self.sdf_supp):
-            try:
-                Chem.SanitizeMol(mol)
-                if mol is not None:
-                    index_list.append(i)
-            except:
-                continue
+            if mol is not None:
+                index_list.append(i)
 
         index_list = [index_list[i : i + self.batch_size] for i in range(0, len(index_list), self.batch_size)]
         if len(index_list) >=2  and len(index_list[-1]) <= 5:
@@ -69,8 +65,33 @@ class VirtualScreening_Dataset(Dataset):
             index_list[-1].extend(last)
         return index_list
 
+class VS_SMI_Dataset(Dataset):
+    def __init__(self,smi_file,batch_size=32):
+        self.batch_size = batch_size
+        self.contents = self.read_smi(smi_file)
 
-def workflow(protein_pdb,smi_file,ligand_sdf=None,centeriod_x=None,centeriod_y=None,centeriod_z=None):
+    def __len__(self):
+        return len(self.contents)
+
+    def __getitem__(self,idx):
+        return self.tensorize(idx)
+
+    def tensorize(self,idx):
+        mol_batch_contents = self.contents[idx]
+        mol_batch_contents = [(sanitize_mol(smi),smi,name) for (smi,name) in mol_batch_contents if Chem.MolFromSmiles(smi,sanitize=True) is not None]
+        mol_feature_batch = mol_batch_to_graph([content[0] for content in mol_batch_contents])
+        mol_smiles = [content[1] for content in mol_batch_contents]
+        mol_names = [content[2] for content in mol_batch_contents]
+        return (mol_feature_batch,mol_smiles,mol_names)
+
+    def read_smi(self,smi_file):
+        with open(smi_file,'r') as f:
+            contents = [line.strip() for line in f]
+        contents = [(line.split()[0],line.split()[1]) for line in contents]
+        contents = [contents[i:i+self.batch_size] for i in range(0,len(contents),self.batch_size)]
+        return contents
+
+def workflow(protein_pdb,mol_file,ligand_sdf=None,centeriod_x=None,centeriod_y=None,centeriod_z=None):
     if torch.cuda.is_available():
         device = torch.device('cuda')
     else:
@@ -83,7 +104,13 @@ def workflow(protein_pdb,smi_file,ligand_sdf=None,centeriod_x=None,centeriod_y=N
         estimator.set_pocket_from_coordinate(protein_pdb,centeriod_x,centeriod_y,centeriod_z)
     else:
         sys.exit()
-    dataset = VirtualScreening_Dataset(smi_file)
+    suffix = os.path.basename(mol_file).split('.')[-1]
+    if suffix == 'smi':
+        dataset = VS_SMI_Dataset(mol_file)
+    elif suffix == 'sdf':
+        dataset = VS_SDF_Dataset(mol_file)
+    else:
+        raise NotImplementedError("mol file input formats besides smi and sdf are not supported")
     dataloader = DataLoader(dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
     predicted_affinities,mol_names,smis = [],[],[]
     with torch.no_grad():
@@ -119,7 +146,9 @@ def result_to_csv_sdf(predicted_affinities,mol_names,smis,prefix=None):
     csv_frame.to_csv(out_csv)
 
 if __name__ == "__main__":
+    from rdkit import RDLogger
     import argparse
+    RDLogger.DisableLog('rdApp.*')
     parser = argparse.ArgumentParser()
     parser.add_argument('-p','--protein',required=True)
     parser.add_argument('-l','--ligand',default=None)
