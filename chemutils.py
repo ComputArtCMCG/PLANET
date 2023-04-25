@@ -331,7 +331,7 @@ def tensorize_molecules(mol_batch:List[Chem.rdchem.Mol]):
     (fatoms, fbonds, agraph, bgraph, lig_scope) = mol_batch_to_graph(mol_batch)
     return (fatoms, fbonds, agraph, bgraph, lig_scope)
 
-def mol_batch_to_graph(mol_batch:List[Chem.rdchem.Mol]):
+def mol_batch_to_graph(mol_batch:List[Chem.rdchem.Mol],auto_detect=True):
     padding = torch.zeros(ATOM_FDIM + BOND_FDIM)
     fatoms,fbonds = [],[padding] #Ensure bond is 1-indexed
     in_bonds,all_bonds = [],[(-1,-1)] #Ensure bond is 1-indexed
@@ -339,6 +339,8 @@ def mol_batch_to_graph(mol_batch:List[Chem.rdchem.Mol]):
     total_atoms = 0
 
     for mol in mol_batch:
+        if auto_detect:
+            Chem.rdmolops.AssignAtomChiralTagsFromStructure(mol)
         n_atoms = mol.GetNumAtoms()
         for atom in mol.GetAtoms():
             fatoms.append(atom_features(atom))
@@ -380,9 +382,6 @@ def mol_batch_to_graph(mol_batch:List[Chem.rdchem.Mol]):
                 bgraph[b1,i] = b2  # index of edges pointed to edge 
 
     return (fatoms, fbonds, agraph, bgraph, lig_scope)
-
-def sanitize_mol(smi):
-    return Chem.AddHs(Chem.MolFromSmiles(Chem.MolToSmiles(Chem.MolFromSmiles(smi,sanitize=True),isomericSmiles=False)))
 
 def role_of_5(mol):
     mol_weight = Descriptors.MolWt(mol)

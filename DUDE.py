@@ -6,44 +6,28 @@ import rdkit.Chem as Chem
 from torch.utils.data import Dataset,DataLoader
 from PLANET_model import PLANET
 import pandas as pd
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score,precision_recall_curve,auc
 from chemutils import ProteinPocket,mol_batch_to_graph,tensorize_protein_pocket
 
 class VirtualScreening_Dataset(Dataset):
-    def __init__(self,sdf,batch_size=32):
+    def __init__(self,smi_file,batch_size=32):
         self.batch_size = batch_size
-        self.sdf_supp = Chem.SDMolSupplier(sdf,removeHs=False,sanitize=True)
-        self.data_index = self.mol_index_from_sdf()
+        with open(smi_file,'r') as f:
+            smi_content = [line.strip().split()[0] for line in f]
+        self.smi_content = [smi_content[i:i+batch_size] for i in range(0,len(smi_content),batch_size)]
 
     def __len__(self):
-        return len(self.data_index)
+        return len(self.smi_content)
 
     def __getitem__(self,idx):
         return self.tensorize(idx)
 
     def tensorize(self,idx):
-        mol_batch_idx = self.data_index[idx]
-        mol_batch = [self.sdf_supp[i] for i in mol_batch_idx]
-        mol_batch = [mol for mol in mol_batch if mol is not None]
-        mol_feature_batch = mol_batch_to_graph(mol_batch)
-        mol_smiles = [Chem.MolToSmiles(mol) for mol in mol_batch]
+        mol_smi_batch = self.smi_content[idx]
+        mol_batch = [Chem.AddHs(Chem.MolFromSmiles(smi)) for smi in mol_smi_batch if Chem.MolFromSmiles(smi) is not None]
+        mol_feature_batch = mol_batch_to_graph(mol_batch,auto_detect=False)
+        mol_smiles = [smi for smi in mol_smi_batch if Chem.MolFromSmiles(smi) is not None]
         return (mol_feature_batch,mol_smiles)
-
-    def mol_index_from_sdf(self):
-        index_list = []
-        for i,mol in enumerate(self.sdf_supp):
-            try:
-                Chem.SanitizeMol(mol)
-                index_list.append(i)
-            except:
-                continue
-
-        index_list = [i for i in index_list if self.sdf_supp[i] is not None]
-        index_list = [index_list[i : i + self.batch_size] for i in range(0, len(index_list), self.batch_size)]
-        if len(index_list) >=2  and len(index_list[-1]) <= 5:
-            last = index_list.pop()
-            index_list[-1].extend(last)
-        return index_list
 
 def predict(model:PLANET,protein_pdb,ligand_sdf,dataloader):
     #model.eval()
@@ -60,14 +44,14 @@ def predict(model:PLANET,protein_pdb,ligand_sdf,dataloader):
 
 def workflow(model,folder_path,out_folder):
     #receptor_name = folder_path.split('/')[-1]
-    actives_sdf = os.path.join(folder_path,'actives_prep.sdf')
-    decoys_sdf = os.path.join(folder_path,'decoys_prep.sdf')
+    actives_smi = os.path.join(folder_path,'actives_prep.smi')
+    decoys_smi = os.path.join(folder_path,'decoys_prep.smi')
     crystal_ligand = os.path.join(folder_path,'crystal_ligand.sdf')
     pdb_path = os.path.join(folder_path,'prepared_receptor.pdb')
 
-    active_dataset = VirtualScreening_Dataset(actives_sdf)
+    active_dataset = VirtualScreening_Dataset(actives_smi)
     active_loader = DataLoader(active_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
-    decoy_dataset = VirtualScreening_Dataset(decoys_sdf)
+    decoy_dataset = VirtualScreening_Dataset(decoys_smi)
     decoy_loader = DataLoader(decoy_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
 
     predicted_active_affinities,active_smiles = predict(model,pdb_path,crystal_ligand,active_loader)
@@ -103,6 +87,13 @@ def EF_calculate(sorted_array,factor):
     EF = (hits_count/sample_count) / (hits_total/all_count)
     return EF
 
+def _percision_recall_area(active_pK,decoy_pK):
+    y_pred = np.concatenate([active_pK,decoy_pK])
+    y_true = np.concatenate([np.ones_like(active_pK),np.zeros_like(decoy_pK)])
+    precision, recall, thresholds = precision_recall_curve(y_true,y_pred)
+    area = auc(recall, precision)
+    return area
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-f','--PLANET_file',required=True)
@@ -125,7 +116,7 @@ if __name__ == "__main__":
     out_dir = args.out_dir
     os.makedirs(args.out_dir,exist_ok=True)
 
-    target_names,active_means,active_medians,decoy_means,decoy_medians,EF_05,EF_1,EF_2,EF_5,auc_scores = [],[],[],[],[],[],[],[],[],[]
+    target_names,active_means,active_medians,decoy_means,decoy_medians,EF_05,EF_1,EF_2,EF_5,auc_scores,auc_prs = [],[],[],[],[],[],[],[],[],[],[]
     PLANET.eval()
     with torch.no_grad():
         for folder in os.listdir(args.DUDE):
@@ -134,6 +125,7 @@ if __name__ == "__main__":
             os.makedirs(out_folder,exist_ok=True)
             predicted_active_affinities,predicted_decoy_affinities = workflow(model=PLANET,folder_path=work_folder,out_folder=out_folder)
             sorted_array,auc_score = EF_sort(predicted_active_affinities,predicted_decoy_affinities)
+            auc_pr = _percision_recall_area(predicted_active_affinities,predicted_decoy_affinities)
             target_names.append(str(folder).upper())
             active_means.append(predicted_active_affinities.mean())
             active_medians.append(np.median(predicted_active_affinities))
@@ -144,6 +136,7 @@ if __name__ == "__main__":
             EF_2.append(EF_calculate(sorted_array,0.02))
             EF_5.append(EF_calculate(sorted_array,0.05))
             auc_scores.append(auc_score)
+            auc_prs.append(auc_pr)
             torch.cuda.empty_cache()
         
         #active_result_path = os.path.join(work_folder,'{}_active.dat'.format(folder))
@@ -158,9 +151,9 @@ if __name__ == "__main__":
         {
             'Target Name':target_name,'Active Mean':active_mean,'Active Median':active_median,
             'Decoy Mean':decoy_mean,'Decoy Median':decoy_median,'Delta Mean':active_mean-decoy_mean,'Delta Median':active_mean-decoy_median,
-            'EF_0.5%':x,'EF_1%':y,'EF_2%':z,'EF_5%':w,'ROC_AUC Score':auc_score
+            'EF_0.5%':x,'EF_1%':y,'EF_2%':z,'EF_5%':w,'ROC_AUC Score':auc_score,'ROC_PR Score':auc_pr
         }
-        for target_name,active_mean,active_median,decoy_mean,decoy_median,x,y,z,w,auc_score in zip(target_names,active_means,active_medians,decoy_means,decoy_medians,EF_05,EF_1,EF_2,EF_5,auc_scores)
+        for target_name,active_mean,active_median,decoy_mean,decoy_median,x,y,z,w,auc_score in zip(target_names,active_means,active_medians,decoy_means,decoy_medians,EF_05,EF_1,EF_2,EF_5,auc_scores,auc_prs)
     ])
     csv_frame.to_csv(os.path.join(out_dir,'summary.csv'))
 

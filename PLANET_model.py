@@ -22,7 +22,7 @@ class PLANET(nn.Module):
         (fresidues,res_map,res_scope,alpha_coordinates) = res_batch
         fresidues = fresidues.to(self.device)
         #res_map = create_var(res_map)
-        alpha_coordinates = alpha_coordinates.to(self.device)
+        alpha_coordinates = create_var(alpha_coordinates)
         (fatoms, fbonds, agraph, bgraph, lig_scope) = mol_batch
         fatoms = fatoms.to(self.device)
         fbonds = fbonds.to(self.device)
@@ -87,7 +87,7 @@ class PLANET(nn.Module):
         
         return lig_interaction_acc,pro_lig_interaction_acc,affinity_mae
 
-    def load_parameters(self,parameters=os.path.join('PLANET','PLANET.iter-205000')):
+    def load_parameters(self,parameters=os.path.join('PLANET','PLANET.param')):
         self.load_state_dict(torch.load(parameters,map_location=self.device))
         
     ###used for screening (only one protein, different mols)

@@ -167,14 +167,6 @@ class ProLig(nn.Module):
             nn.LeakyReLU(0.1),
         )
 
-        
-        #para group
-        #self.interaction_modules = [self.linear_interaction_pocket,self.linear_interaction_ligand]
-        #self.affinity_modules = [self.linear_affinity]
-
-
-    
-
     def forward(self,fresidues,fatoms,res_scope,lig_scope):
         fatoms,fresidues = self.prolig_attention(fatoms,fresidues,lig_scope,res_scope)
         predicted_lig_interactions,predicted_interactions,predicted_affinities = [],[],[]
@@ -213,7 +205,35 @@ class ProLig(nn.Module):
         #print(predicted_interactions)
         predicted_affinities = torch.cat(predicted_affinities)
         return predicted_lig_interactions,predicted_interactions,predicted_affinities
+    
+    def _forward(self,fresidues,fatoms,res_scope,lig_scope):
+        fatoms,fresidues = self.prolig_attention(fatoms,fresidues,lig_scope,res_scope)
+        predicted_affinities = []
+        for ((start_res,res_count),(start_atom,atom_count)) in zip(res_scope,lig_scope):
+            
+            #shape = [atom_count,res_count,self.feature_dims]
+            pocket_features = torch.unsqueeze(fresidues[start_res:start_res+res_count],dim=0) #[1,res,features]
+            ligand_features = torch.unsqueeze(fatoms[start_atom:start_atom+atom_count],dim=1) #[atoms,1,features]
+           # pocket_features = torch.unsqueeze(fresidues[start_res:start_res+res_count],dim=0) #[1,res,features]
+           # ligand_features = torch.unsqueeze(fatoms[start_atom:start_atom+atom_count],dim=1) #[atoms,1,features]
+            
 
+            predicted_interaction = self.pro_lig_interaction(torch.multiply(
+                self.linear_ligand_interaction(ligand_features),
+                self.linear_pocket_interaction(pocket_features)
+                ))  #[atom,res,1]
+
+            complex_features = torch.multiply(
+                self.linear_ligand_affinity(ligand_features),
+                self.linear_pocket_affinity(pocket_features)
+            )
+
+            predict_affinity = torch.sum(self.linear_affinity(complex_features) * predicted_interaction).reshape([1])
+
+            predicted_affinities.append(predict_affinity)
+        
+        predicted_affinities = torch.cat(predicted_affinities)
+        return predicted_affinities
 
 class ProteinEGNN(nn.Module):
     def __init__(self,feature_dims,update_iters,device):

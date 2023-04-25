@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset, DataLoader
 from PLANET_model import PLANET
-from chemutils import ProteinPocket,mol_batch_to_graph,sanitize_mol
+from chemutils import ProteinPocket,mol_batch_to_graph
 
 class PlanetEstimator():
     def __init__(self,device):
@@ -32,7 +32,7 @@ class PlanetEstimator():
         self.res_features = self.model.cal_res_features_helper(self.pocket.res_features,self.pocket.alpha_coordinates)
 
 class VS_SDF_Dataset(Dataset):
-    def __init__(self,sdf_file,batch_size=48):
+    def __init__(self,sdf_file,batch_size=32):
         self.batch_size = batch_size
         self.sdf_supp = Chem.SDMolSupplier(sdf_file,removeHs=False,sanitize=True)
         self.data_index = self.mol_index_from_sdf()
@@ -44,14 +44,17 @@ class VS_SDF_Dataset(Dataset):
         return self.tensorize(idx)
 
     def tensorize(self,idx):
-        mol_batch_idx = self.data_index[idx]
-        mol_batch = [self.sdf_supp[i] for i in mol_batch_idx]
-        mol_batch = [Chem.AddHs(mol) for mol in mol_batch if mol is not None]
-        mol_feature_batch = mol_batch_to_graph(mol_batch)
-        mol_smiles = [Chem.MolToSmiles(Chem.RemoveHs(mol)) for mol in mol_batch]
-        mol_names = [""  for mol in mol_batch]
-        #mol_names = [mol.GetProp('PUBCHEM_EXT_DATASOURCE_REGID') for mol in mol_batch]
-        return (mol_feature_batch,mol_smiles,mol_names)
+        try:
+            mol_batch_idx = self.data_index[idx]
+            mol_batch = [self.sdf_supp[i] for i in mol_batch_idx]
+            mol_names = [mol.GetProp('_Name') for mol in mol_batch if mol is not None]
+            mol_batch = [Chem.AddHs(Chem.MolFromSmiles(Chem.MolToSmiles((mol),isomericSmiles=False))) for mol in mol_batch if mol is not None]
+            mol_feature_batch = mol_batch_to_graph(mol_batch)
+            mol_smiles = [Chem.MolToSmiles(Chem.RemoveHs(mol)) for mol in mol_batch if mol is not None]
+            #mol_names = [""  for mol in mol_batch]
+            return (mol_feature_batch,mol_smiles,mol_names)
+        except:
+            return (None,None,None)
 
     def mol_index_from_sdf(self):
         index_list = []
@@ -78,8 +81,8 @@ class VS_SMI_Dataset(Dataset):
 
     def tensorize(self,idx):
         mol_batch_contents = self.contents[idx]
-        mol_batch_contents = [(sanitize_mol(smi),smi,name) for (smi,name) in mol_batch_contents if Chem.MolFromSmiles(smi,sanitize=True) is not None]
-        mol_feature_batch = mol_batch_to_graph([content[0] for content in mol_batch_contents])
+        mol_batch_contents = [(Chem.AddHs(Chem.MolFromSmiles(smi)),smi,name) for (smi,name) in mol_batch_contents if Chem.MolFromSmiles(smi,sanitize=True) is not None]
+        mol_feature_batch = mol_batch_to_graph([content[0] for content in mol_batch_contents],auto_detect=False)
         mol_smiles = [content[1] for content in mol_batch_contents]
         mol_names = [content[2] for content in mol_batch_contents]
         return (mol_feature_batch,mol_smiles,mol_names)
@@ -111,16 +114,19 @@ def workflow(protein_pdb,mol_file,ligand_sdf=None,centeriod_x=None,centeriod_y=N
         dataset = VS_SDF_Dataset(mol_file)
     else:
         raise NotImplementedError("mol file input formats besides smi and sdf are not supported")
-    dataloader = DataLoader(dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
+    dataloader = DataLoader(dataset,batch_size=1,shuffle=False,num_workers=2,drop_last=False,collate_fn=lambda x:x[0])
     predicted_affinities,mol_names,smis = [],[],[]
     with torch.no_grad():
         for (mol_feature_batch,smi_batch,mol_name) in dataloader:
-            batch_size = len(smi_batch)
-            fresidues_batch,res_scope = estimator.model.cal_res_features(estimator.res_features,batch_size)
-            predicted_affinity = estimator.model.screening(fresidues_batch,res_scope,mol_feature_batch)
-            predicted_affinities.append((predicted_affinity.view([-1]).cpu().numpy()))
-            smis.extend(smi_batch)
-            mol_names.extend(mol_name)
+            try:
+                batch_size = len(smi_batch)
+                fresidues_batch,res_scope = estimator.model.cal_res_features(estimator.res_features,batch_size)
+                predicted_affinity = estimator.model.screening(fresidues_batch,res_scope,mol_feature_batch)
+                predicted_affinities.append((predicted_affinity.view([-1]).cpu().numpy()))
+                smis.extend(smi_batch)
+                mol_names.extend(mol_name)
+            except:
+                continue
     predicted_affinities = np.concatenate(predicted_affinities)
     return predicted_affinities,mol_names,smis
 
@@ -132,10 +138,13 @@ def result_to_csv_sdf(predicted_affinities,mol_names,smis,prefix=None):
     writer = Chem.SDWriter(out_sdf)
     writer.SetProps(['PLANET_affinity'])
     for aff,name,smi in zip(predicted_affinities,mol_names,smis):
-        mol = Chem.MolFromSmiles(smi)
-        mol.SetProp('PLANET_affinity', '{:.3f}'.format(aff))
-        mol.SetProp('_Name',name)
-        writer.write(mol) 
+        try:
+            mol = Chem.MolFromSmiles(smi)
+            mol.SetProp('PLANET_affinity', '{:.3f}'.format(aff))
+            mol.SetProp('_Name',name)
+            writer.write(mol) 
+        except:
+            continue
     writer.close()
     csv_frame = pd.DataFrame([
         {
