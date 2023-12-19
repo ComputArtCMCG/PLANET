@@ -48,10 +48,9 @@ class VS_SDF_Dataset(Dataset):
             mol_batch_idx = self.data_index[idx]
             mol_batch = [self.sdf_supp[i] for i in mol_batch_idx]
             mol_names = [mol.GetProp('_Name') for mol in mol_batch if mol is not None]
-            mol_batch = [Chem.AddHs(Chem.MolFromSmiles(Chem.MolToSmiles((mol),isomericSmiles=False))) for mol in mol_batch if mol is not None]
+            mol_batch = [Chem.AddHs(mol) for mol in mol_batch if mol is not None]
             mol_feature_batch = mol_batch_to_graph(mol_batch)
             mol_smiles = [Chem.MolToSmiles(Chem.RemoveHs(mol)) for mol in mol_batch if mol is not None]
-            #mol_names = [""  for mol in mol_batch]
             return (mol_feature_batch,mol_smiles,mol_names)
         except:
             return (None,None,None)
@@ -90,7 +89,10 @@ class VS_SMI_Dataset(Dataset):
     def read_smi(self,smi_file):
         with open(smi_file,'r') as f:
             contents = [line.strip() for line in f]
-        contents = [(line.split()[0],line.split()[1]) for line in contents]
+        try:    
+            contents = [(line.split()[0],line.split()[1]) for line in contents]
+        except IndexError:
+            contents = [(line.split()[0],"UNKOWN") for line in contents]
         contents = [contents[i:i+self.batch_size] for i in range(0,len(contents),self.batch_size)]
         return contents
 
