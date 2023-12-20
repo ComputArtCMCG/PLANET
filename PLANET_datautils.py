@@ -66,11 +66,10 @@ if __name__ == "__main__":
     pdb_dir = args.pdbdir
     
     train_csv = os.path.join(base_dir,'TrainSet.csv')
-    train_affinity_csv = os.path.join(base_dir,'TrainAffinitySet.csv')
     valid_csv = os.path.join(base_dir,'ValidSet.csv')
     #test_csv = os.path.join(base_dir,'TestSet.csv')
     core_csv = os.path.join(base_dir,'CoreSet.csv')
-    for (csv,_type_) in zip([train_csv,train_affinity_csv,valid_csv,core_csv],['train','train_affinity','valid','core']):
+    for (csv,_type_) in zip([train_csv,valid_csv,core_csv],['train','valid','core']):
         dataframe = pd.read_csv(csv,index_col=0)
         pdb_codes = dataframe['PDB_code']
         pKs = dataframe['pK'].astype(float)

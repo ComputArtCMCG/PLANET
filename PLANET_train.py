@@ -13,7 +13,6 @@ if __name__ == '__main__':
     RDLogger.DisableLog('rdApp.*')
     parser = argparse.ArgumentParser()
     parser.add_argument('-t','--train', required=True)
-    parser.add_argument('-ta','--train_affinity', required=True)
     parser.add_argument('-v','--valid',required=True)
     parser.add_argument('-te','--test',required=True)
     parser.add_argument('-d','--save_dir', required=True)
@@ -72,12 +71,8 @@ if __name__ == '__main__':
 
     PLANET.train()
     for epoch in range(1,1+args.epoch):
-        if not affinity_all:
-            train_dataset = ProLigDataset(args.train,args.batch_size,shuffle=True,decoy_flag=True)
-            train_loader = DataLoader(train_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
-        else:
-            train_dataset = ProLigDataset(args.train_affinity,args.batch_size,shuffle=True,decoy_flag=False)
-            train_loader = DataLoader(train_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
+        train_dataset = ProLigDataset(args.train,args.batch_size,shuffle=True,decoy_flag=True)
+        train_loader = DataLoader(train_dataset,batch_size=1,shuffle=False,num_workers=4,drop_last=False,collate_fn=lambda x:x[0])
         
         for (res_feature_batch,mol_feature_batch,targets) in train_loader:
             optimizer.zero_grad()
