@@ -37,5 +37,5 @@ suppose the absolute path to PDBbind general set is $DATASET, and all the script
 ```bash
 python3.6 $PLANET/process_PDBbind.py -d $DATASET -n $njobs
 python3.6 $PLANET/PLANET_datautils.py -p $DATASET -d $PLANET/data/
-python3.6 $PLANET/PLANET_train.py -t $PLANET/data/TrainSet.csv -v $PLANET/data/ValidSet.csv -d $PLANET/model_training/ 
+python3.6 $PLANET/PLANET_train.py -t $PLANET/data/train.pkl  -v $PLANET/data/valid.pkl -te $PLANET/data/core.pkl -d .
 ```
