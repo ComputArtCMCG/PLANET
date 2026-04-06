@@ -7,18 +7,21 @@ Here, we have developed a graph neural network model called PLANET (Protein-Liga
 As tested on the CASF-2016 benchmark, PLANET exhibited a comparable level of scoring power as some other machine learning models that rely on 3D protein-ligand complex structures as inputs. Besides, it exhibited notably better performance in virtual screening trials on the DUD-E and LIT-PCBA benchmarks. Compared to the popular conventional docking program GLIDE, PLANET took less than one percent of computation time to finish the same virtual screening job without a significant loss in accuracy because it did not need to perform exhaustive conformational sampling. In summary, PLANET achieved a decent performance in virtual screening as well as predicting protein-ligand binding affinity. This feature makes PLANET an attractive tool for drug discovery in the real world.
 
 ### Usage
-1. Setup dependencies
+1. Setup dependencies (requires [uv](https://docs.astral.sh/uv/))
 ```bash
-conda env create -f planet.yaml
-conda activate planet
+uv sync
 ```
+This installs PyTorch with CUDA 12.1 support by default. For CPU-only or a different CUDA version edit the index URL in `pyproject.toml` before running `uv sync`:
+- CPU: `https://download.pytorch.org/whl/cpu`
+- CUDA 12.4: `https://download.pytorch.org/whl/cu124`
+
 2. Using PLANET <br>
 We have created a demo folder which includes a protein file (adrb2.pdb), a crystal ligand file (adrb2_ligand.sdf) as well as molecules (mols.sdf) to be estimated. These files are  originally derived from DUD-E dataset and prepared as below: <br>
 (1) The protein structure file (.pdb) are prepared using *prepwizard* in Maestro, including fixing broken residues and assign protonated states. Other structure preparation tools can also be applied. _NOTE:_ The most important is that $\alpha$-carbon of each reasidues must be correctly fixed in the .pdb file.
 (2) The molecule files (mols.sdf) are prepared using *epik* in Maestro, including adding hydrogen atoms and ionized states. the adrb2_ligand.sdf file is only used for determining binding pocket (only need to be in .sdf format).
 ```bash
 cd demo
-python3.6 ../PLANET_run.py -p adrb2.pdb -l adrb2_ligand.sdf -m mols.sdf
+uv run ../PLANET_run.py -p adrb2.pdb -l adrb2_ligand.sdf -m mols.sdf
 ```
 3. Parameters
    - _-p or --protein_, protein structure file;
@@ -29,13 +32,25 @@ python3.6 ../PLANET_run.py -p adrb2.pdb -l adrb2_ligand.sdf -m mols.sdf
 4. Output files <br>
 We provide two output formats including .csv and .sdf
 
-### Training PLANET
-We provided the training scripts called "PLANET_train.py" and "PLANET_datautils.py". But the training data (i.e. PDBbind general set v.2020) are not included in this repository, which can be accessed through: http://pdbbind.org.cn/. <br>
-As mentioned in our paper (in preparation), all structures in general set are prepared and a large number of decoy molecules are used for augmentation. This part of data are not provided to public till now. <br>
-If anyone want to re-train the PLANET (maybe after the training data is released, at that time another folder called 'data' will be released, in which include the summary of training set, validation set and core set in .csv format), here is the protocol: <br>
-suppose the absolute path to PDBbind general set is $DATASET, and all the scripts related to PLANET are in $PLANET. 
+### Training PLANET on PDBbind
+Training data (PDBbind general set v.2020) can be accessed at http://pdbbind.org.cn/. <br>
+Suppose `$DATASET` is the absolute path to your PDBbind dataset directory, `$PK_JSON` is the path to your `PDBbind2020.json` file with pK values, and `$PLANET` is the repo root.
+
+**Step 1 – preprocess structures (runs in parallel with `$NJOBS` workers):**
 ```bash
-python3.6 $PLANET/process_PDBbind.py -d $DATASET -n $njobs
-python3.6 $PLANET/PLANET_datautils.py -p $DATASET -d $PLANET/data/
-python3.6 $PLANET/PLANET_train.py -t $PLANET/data/train.pkl  -v $PLANET/data/valid.pkl -te $PLANET/data/core.pkl -d .
+uv run $PLANET/process_PDBBind.py -d $DATASET -n $NJOBS -k $PK_JSON
+```
+
+**Step 2 – build train/valid/core pickle files:**
+```bash
+uv run $PLANET/PLANET_datautils.py -p $DATASET -d $PLANET/data/
+```
+
+**Step 3 – train:**
+```bash
+uv run $PLANET/PLANET_train.py \
+    -t $PLANET/data/train.pkl \
+    -v $PLANET/data/valid.pkl \
+    -te $PLANET/data/core.pkl \
+    -d .
 ```

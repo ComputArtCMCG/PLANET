@@ -1,5 +1,4 @@
 from operator import le
-from numpy.core.fromnumeric import shape
 import pandas as pd
 import rdkit,os
 import rdkit.Chem as Chem

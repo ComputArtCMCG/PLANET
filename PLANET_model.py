@@ -88,7 +88,7 @@ class PLANET(nn.Module):
         return lig_interaction_acc,pro_lig_interaction_acc,affinity_mae
 
     def load_parameters(self,parameters=os.path.join(os.path.dirname(os.path.abspath(__file__)),'PLANET.param')):
-        self.load_state_dict(torch.load(parameters,map_location=self.device))
+        self.load_state_dict(torch.load(parameters, map_location=self.device, weights_only=True))
         
     ###used for screening (only one protein, different mols)
     def cal_res_features_helper(self,fresidues,coordinates):
