@@ -52,7 +52,8 @@ if __name__ == '__main__':
 
     feature_dims,nheads,key_dims,value_dims,pro_update_inters,lig_update_iters,pro_lig_update_iters = args.feature_dims,args.nheads,args.key_dims,args.value_dims,\
         args.pro_update_inters,args.lig_update_iters,args.pro_lig_update_iters
-    PLANET = PLANET(feature_dims,nheads,key_dims,value_dims,pro_update_inters,lig_update_iters,pro_lig_update_iters,'cuda').cuda()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    PLANET = PLANET(feature_dims,nheads,key_dims,value_dims,pro_update_inters,lig_update_iters,pro_lig_update_iters,device).to(device)
 
     for param in PLANET.parameters():
         if param.dim() == 1:

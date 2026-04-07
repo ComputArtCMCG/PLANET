@@ -111,8 +111,9 @@ if __name__ == "__main__":
 
     feature_dims,nheads,key_dims,value_dims,pro_update_inters,lig_update_iters,pro_lig_update_iters = args.feature_dims,args.nheads,args.key_dims,args.value_dims,\
         args.pro_update_inters,args.lig_update_iters,args.pro_lig_update_iters
-    PLANET = PLANET(feature_dims,nheads,key_dims,value_dims,pro_update_inters,lig_update_iters,pro_lig_update_iters,'cuda').cuda()
-    PLANET.load_state_dict(torch.load(args.PLANET_file))
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    PLANET = PLANET(feature_dims,nheads,key_dims,value_dims,pro_update_inters,lig_update_iters,pro_lig_update_iters,device).to(device)
+    PLANET.load_state_dict(torch.load(args.PLANET_file, map_location=device, weights_only=True))
     out_dir = args.out_dir
     os.makedirs(args.out_dir,exist_ok=True)
 
